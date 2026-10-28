@@ -17,16 +17,10 @@ import {
 } from '@playwright/test/reporter';
 import * as fs from 'fs';
 import * as path from 'path';
-interface RcaVerdict { severity: string; priority: string; rootCause: string; fixes: string[] }
-interface BuildSummary { runId: string; tests: Record<string, string> }
-interface FlakyResult { flaky: string[]; summary?: string; counts: { flaky: number; failing: number; total: number } }
-interface HealReport {
-    failedSelector: string;
-    intent: string;
-    verified: { selector: string; strategy: string; matchCount: number; visible: boolean; reasoning: string }[];
-    rejected: { selector: string; reason: string }[];
-    unavailableReason?: string;
-}
+import { analyzeFailure, type RcaVerdict } from '../ai/agents/rcaAgent';
+import { analyzeFlaky, type BuildSummary, type FlakyResult } from '../ai/agents/flakyAnalyzer';
+import { hasApiKey } from '../ai/config/providers';
+import type { HealReport } from './selfHeal';
 
 export interface StepData {
     title: string;
@@ -204,8 +198,8 @@ class CustomTTAReporter implements Reporter {
                 duration: step.duration || 0,
                 status: step.error ? 'failed' : 'passed',
                 startTime: new Date(step.startTime).toLocaleTimeString(),
-                error: step.error?.message,
-                stackTrace: step.error?.stack,
+                error: step.error?.message && this.stripAnsi(step.error.message),
+                stackTrace: step.error?.stack && this.stripAnsi(step.error.stack),
                 consoleLogs: [],
                 stepIndex: stepCounter,
                 videoStartTime: Math.max(0, videoStartTime),
@@ -249,7 +243,7 @@ class CustomTTAReporter implements Reporter {
         console.log('   ─────────────────────────────────────────────────────');
         console.log(`   ${statusIcon} RESULT: ${status.toUpperCase()} | Duration: ${testTime}`);
         if (result.error) {
-            console.log(`   ⚠️  Error: ${result.error.message?.substring(0, 80)}...`);
+            console.log(`   ⚠️  Error: ${this.stripAnsi(result.error.message ?? '').substring(0, 80)}...`);
         }
         console.log(`\n   📊 Running Total: ✅ ${this.suiteStats.passed} | ❌ ${this.suiteStats.failed} | ⏭️ ${this.suiteStats.skipped}`);
 
@@ -397,8 +391,8 @@ class CustomTTAReporter implements Reporter {
             logs: testLogs,
             video: videoPath,
             trace: tracePath,
-            error: result.error?.message,
-            errorStack: result.error?.stack,
+            error: result.error?.message && this.stripAnsi(result.error.message),
+            errorStack: result.error?.stack && this.stripAnsi(result.error.stack),
             tags: tagMatches,
         };
 
@@ -519,8 +513,38 @@ class CustomTTAReporter implements Reporter {
 
     // RCA AI agent: analyze each failed test via the LLM gateway and store a verdict.
     private async runRcaAnalysis(): Promise<void> {
-        // AI verdict integration is optional and not bundled with this project.
+        const failures = this.testResults.filter(
+            (t) => t.status === 'failed' || t.status === 'timedOut',
+        );
+        if (failures.length === 0) return;
+        if (!hasApiKey()) {
+            console.log('🤖 RCA agent: no LLM API key set — skipping AI verdict.');
+            return;
+        }
+
+        const cap = 10;
+        const toAnalyze = failures.slice(0, cap);
+        if (failures.length > cap) {
+            console.log(`🤖 RCA agent: analyzing first ${cap} of ${failures.length} failures.`);
+        } else {
+            console.log(`🤖 RCA agent analyzing ${toAnalyze.length} failure(s)...`);
+        }
+
+        for (const t of toAnalyze) {
+            try {
+                const verdict = await analyzeFailure({
+                    title: t.fullTitle,
+                    file: t.location,
+                    error: t.error ?? 'Unknown error',
+                    stack: t.errorStack,
+                });
+                this.aiVerdicts.push({ test: t.fullTitle, file: t.location, verdict });
+            } catch (e) {
+                console.warn(`RCA failed for ${t.title}: ${(e as Error).message}`);
+            }
+        }
     }
+
     // Snapshot this run's per-test statuses and load the previous snapshot.
     private snapshotAndLoadPrev(): { prev?: BuildSummary; curr: BuildSummary } {
         const dir = 'reports/runs';
@@ -561,7 +585,7 @@ class CustomTTAReporter implements Reporter {
             console.log('🔁 Flaky analyzer: only one build recorded — run again to compare.');
             return;
         }
-        this.flakyResult = this.compareBuilds(prev, curr);
+        this.flakyResult = await analyzeFlaky(prev, curr, hasApiKey());
         this.prevBuildId = prev.runId;
         this.currBuildId = curr.runId;
         console.log(
@@ -569,12 +593,6 @@ class CustomTTAReporter implements Reporter {
         );
     }
 
-    private compareBuilds(prev: BuildSummary, curr: BuildSummary): FlakyResult {
-        const names = new Set([...Object.keys(prev.tests), ...Object.keys(curr.tests)]);
-        const flaky = [...names].filter((name) => prev.tests[name] !== curr.tests[name]);
-        const failing = Object.values(curr.tests).filter((status) => status === 'failed' || status === 'timedOut').length;
-        return { flaky, counts: { flaky: flaky.length, failing, total: names.size } };
-    }
     private formatTime(date: Date): string {
         return date.toLocaleString('en-US', {
             month: 'short',

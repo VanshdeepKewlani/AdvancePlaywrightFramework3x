@@ -28,7 +28,6 @@ function resolveBaseURL(): string {
     default:
       return process.env.QA_BASE_URL || 'https://app.thetestingacademy.com';
   }
-
 }
 
 /**
@@ -45,28 +44,35 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: './src/utils/CustomReporter.ts',
+  reporter: [
+    ['line'],
+    ['html', { open: 'never' }],
+    /* TTA custom report, written to tta-report/ (index.html always points to the latest run). */
+    ['./src/utils/CustomReporter.ts'],
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    
-    viewport: { width: 1920, height: 1080 },
     /* Base URL to use in actions like `await page.goto('')`. */
     baseURL: resolveBaseURL(),
+
+    /* Media for the custom report. 'on' captures for every test, pass or fail.
+       For a real suite prefer 'only-on-failure' / 'retain-on-failure'. */
     screenshot: 'on',
     video: 'on',
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on',
-    /* Headed locally. CI runners have no display, so stay headless there */
-    headless: !!process.env.CI
+
+    /* Headed locally. CI runners have no display, so stay headless there. */
+    headless: !!process.env.CI,
   },
 
   /* Configure projects for major browsers */
   projects: [
     {
       name: 'chromium',
+      /* Full HD. Set after the device spread, because devices['Desktop Chrome']
+         carries its own 1280x720 viewport and project-level `use` wins. */
       use: {
         ...devices['Desktop Chrome'],
-        headless: !!process.env.CI,
         viewport: { width: 1920, height: 1080 },
       },
     }
