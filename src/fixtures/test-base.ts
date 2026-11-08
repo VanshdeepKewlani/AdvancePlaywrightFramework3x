@@ -87,6 +87,9 @@ export const test = base.extend<TestFixture>({
     inventoryPage: async ({ page }, use) => {
         await use(new InventoryPage(page));
     },
+    itemDetailPage: async ({ page }, use) => {
+        await use(new ItemDetailPage(page));
+    },
     cartPage: async ({ page }, use) => {
         await use(new CartPage(page));
     },

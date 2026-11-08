@@ -449,13 +449,13 @@ flowchart LR
 
 | Fixture | Gives the test | Setup it runs |
 |---|---|---|
-| `loginPage`, `inventoryPage`, `cartPage`, `checkoutStepOnePage`, `checkoutStepTwoPage`, `checkoutCompletePage` | A page object | None, no navigation |
+| `loginPage`, `inventoryPage`, `itemDetailPage`, `cartPage`, `checkoutStepOnePage`, `checkoutStepTwoPage`, `checkoutCompletePage` | A page object | None, no navigation |
 | `validLogin` | `LoginPage` | Logs in as `standard_user`, waits for the login button to disappear |
 | `invalidLogin` | `{ loginPage, username }` | Logs in as `locked_out_user`, waits for the error box |
 | `loginWithInventory` | `InventoryPage` | `validLogin`, then asserts the inventory page loaded |
 | `loginWithSelectedItem` | `{ inventoryPage, itemId }` | `loginWithInventory`, then adds `test-allthethings-tshirt-red` |
 
-The users come from [logintestdata.json](src/testdata/logintestdata.json). `itemDetailPage` is declared in the fixture type but not registered yet, so asking for it fails at run time.
+The users come from [logintestdata.json](src/testdata/logintestdata.json).
 
 ```ts
 // src/fixtures/test-base.ts
@@ -781,7 +781,7 @@ Sync readers (CSV, YAML) can drive test generation at collection time. Async rea
 
 ## CI
 
-[.github/workflows/playwright.yml](.github/workflows/playwright.yml) runs the suite on every push and pull request to `main`/`master`: installs dependencies and browsers, runs the tests headless, and uploads the Playwright HTML report as a build artifact.
+[.github/workflows/playwright.yml](.github/workflows/playwright.yml) runs the suite on every push and pull request to `main`/`master`: installs dependencies and browsers, runs the tests headless, and uploads the Playwright HTML report, the TTA report (`tta-report/`) and the logs (`logs/`) as build artifacts.
 
 ## Author
 
