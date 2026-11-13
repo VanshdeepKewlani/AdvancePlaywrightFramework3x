@@ -78,6 +78,10 @@ export class DataGenerator {
         return faker.location.zipCode();
     }
 
+    static transferNote(): string {
+        return faker.lorem.sentence();
+    }
+
     // ---------- primitives ----------
 
     /** Whole number in an inclusive range, e.g. a price or a quantity. */
