@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
 import { DataGenerator } from '../../utils/DataGenerator';
-import { requireEnv } from '../../config/env';
 
 const url = 'https://app.thetestingacademy.com/playwright/tta-bank/dashboard';
 
